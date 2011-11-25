@@ -341,9 +341,16 @@ var Energia = Class.$extend({
 Energia.renderer = Class.$extend({
 	__init__ : function(canvasElement) {
 		// Set canvas
-		this.canvas = $(canvasElement);
-		// Make 2D canvas
-		this.canvas2D = this.canvas.get(0).getContext("2D");
+		this.canvasContainer = $(canvasElement);
+		// Create canvas element
+		var canvasElement = $("<canvas>");
+		// Add it to the canvasContainer
+		this.canvasContainer.append(canvasElement);
+		// Set correct size
+		canvasElement.get(0).width = this.canvasContainer.width();
+		canvasElement.get(0).height = this.canvasContainer.height();
+		// Get 2D context
+		this.canvas = canvasElement.get(0).getContext("2d");
 		// Fake the requestAnimationFrame
 		window.requestAnimFrame = (function(){
 			return  window.requestAnimationFrame       || 
@@ -357,8 +364,8 @@ Energia.renderer = Class.$extend({
 		})();
 	},
 	info : "Default renderer",
+	canvasContainer : null,
 	canvas : null,
-	canvas2D : null,
 	energia : null,
 	doRender : false,
 	startRender : function() {
@@ -372,21 +379,13 @@ Energia.renderer = Class.$extend({
 		this.doRender = false;
 	},
 	render : function() {
+		// Clear the canvas
+		this.canvas.clearRect(0,0,this.canvas.canvas.width,this.canvas.canvas.height);
 		// render all entities
 		for(entityID in this.energia.entities) {
 			// Render it on the screen with its amount of energy
-			var elm = $("#energia_entity_"+entityID);
-			if (!elm.length) {
-				// Create DOM element
-				var elm = $("<div/>", { id: "energia_entity_"+entityID });
-				elm.css("position", "absolute");
-				elm.css("font-size", 8);
-				elm.css("padding-left", "5px");
-				this.canvas.append(elm);
-			}
 			var entity = this.energia.entities[entityID];
-			elm.css("top", entity.position.y * 15);
-			elm.css("left", entity.position.x * 15);
+			// Select color for entity
 			if (entity instanceof this.energia.Producer) {
 				var color = "#ff0000";
 			} else {
@@ -397,12 +396,17 @@ Energia.renderer = Class.$extend({
 			{
 				color = "#00ff00";
 			}
-			elm.css("color", color);
-			elm.css("border-left", "10px solid " + color);
-			elm.html(Math.round(entity.resources.energy*10)/10 + " (uit " + Math.round(entity.resourcesPulsedDuringTurn.energy) + ", in " + Math.round(entity.resourcesReceivedDuringTurn.energy) + ")");
+			// Draw the entity
+			this.canvas.fillStyle = color; 
+			this.canvas.fillRect(entity.position.x * 15 - 5, entity.position.y * 15 - 5, 10, 10);
+			var text = (Math.round(entity.resources.energy*10)/10 + " (uit " + Math.round(entity.resourcesPulsedDuringTurn.energy) + ", in " + Math.round(entity.resourcesReceivedDuringTurn.energy) + ")");
+			
 			// Draw the pulseRadius around element
-			this.canvas2D.fillStyle = "rgba(0,0,0,0.5)";  
-			this.canvas2D.fillRect(10, 10, 55, 50);
+			this.canvas.beginPath();
+			this.canvas.arc(entity.position.x * 15, entity.position.y * 15, entity.pulseRadius * 15,entity.position.y, entity.pulseRadius * 15,Math.PI*2,true);
+			this.canvas.closePath();
+			this.canvas.fillStyle = "rgba(0,0,0,0.1)";  
+			this.canvas.fill();
 		}
 		// Render context menu, if useful
 		var contextMenu = $("#energia_renderer_contextmenu");
@@ -410,8 +414,9 @@ Energia.renderer = Class.$extend({
 			var contextMenuHTML = "<button>Selfdestruct</button>";
 			contextMenu = $("<div>", { id: "energia_renderer_contextmenu" });
 			contextMenu.html(contextMenuHTML);
-			contextMenu.find("button").bind("click", function() { this.energia.removeEntities(this.energia.getSelectedEntities()); }.bind(this));
-			this.canvas.append(contextMenu);
+			contextMenu.find("button").on("click", function() { this.energia.removeEntities(this.energia.getSelectedEntities()); }.bind(this));
+			contextMenu.on("click", function() { this.preventDefault(); });
+			this.canvasContainer.append(contextMenu);
 		}
 		if (this.energia.selectedEntities.length) {
 			contextMenu.fadeIn();
@@ -432,13 +437,13 @@ Energia.renderer = Class.$extend({
 
 // Input
 Energia.input = Class.$extend({
-	__init__ : function(canvasElement) {
-		this.canvas = $(canvasElement);
+	__init__ : function(canvasContainer) {
+		this.canvasContainer = $(canvasContainer);
 		// Set listener on document
-		$(this.canvas).on("click", this.processInput.bind(this));
+		$(this.canvasContainer).on("click", this.processInput.bind(this));
 	},
 	info : "Default input",
-	canvas : null,
+	canvasContainer : null,
 	energia : null,
 	mouseDownPosition : {x:-1,y:-1},
 	setMouseDownPosition : function(event) {
