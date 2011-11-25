@@ -191,7 +191,7 @@ var Energia = Class.$extend({
 			this.addEntities([
 				new this.MiddleStation().fillData(
 					{resources:{energy:60}, 
-					position:{x:(15+a*5),y:25}}
+					position:{x:(25+a*10),y:25}}
 				)
 			]);
 		}
@@ -280,7 +280,6 @@ var Energia = Class.$extend({
 			if (this.entities[entityid].resources.energy < 0) {
 				var toBeRemoved = {};
 				toBeRemoved[entityid] = this.entities[entityid];
-				this.renderer.removeEntities(toBeRemoved);
 				delete this.entities[entityid];
 			}
 		}
@@ -400,6 +399,8 @@ Energia.renderer = Class.$extend({
 			this.canvas.fillStyle = color; 
 			this.canvas.fillRect(entity.position.x * 15 - 5, entity.position.y * 15 - 5, 10, 10);
 			var text = (Math.round(entity.resources.energy*10)/10 + " (uit " + Math.round(entity.resourcesPulsedDuringTurn.energy) + ", in " + Math.round(entity.resourcesReceivedDuringTurn.energy) + ")");
+			this.canvas.font = '10px sans-serif';
+			this.canvas.fillText(text, entity.position.x * 15 + 10, entity.position.y * 15 + 3);
 			
 			// Draw the pulseRadius around element
 			this.canvas.beginPath();
@@ -415,7 +416,7 @@ Energia.renderer = Class.$extend({
 			contextMenu = $("<div>", { id: "energia_renderer_contextmenu" });
 			contextMenu.html(contextMenuHTML);
 			contextMenu.find("button").on("click", function() { this.energia.removeEntities(this.energia.getSelectedEntities()); }.bind(this));
-			contextMenu.on("click", function() { this.preventDefault(); });
+			contextMenu.on("click", function(event) { event.preventDefault(); event.stopPropagation(); });
 			this.canvasContainer.append(contextMenu);
 		}
 		if (this.energia.selectedEntities.length) {
