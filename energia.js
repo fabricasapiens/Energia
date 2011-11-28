@@ -479,7 +479,9 @@ Energia.input = Class.$extend({
 				this.energia.setSelectedEntities([closestEntityID]);
 			}
 		}
+		// Prevent default action
 		event.preventDefault();
 		event.stopPropagation();
+		return false;
 	}
 });

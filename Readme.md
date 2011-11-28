@@ -12,4 +12,4 @@ Code of the client is free and open. Online multiplayer is in the works.
 
 ###License###
 Non-commercial license
-The Wi3 CMS is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License. Most importantly, this implies that anyone is free to share and remix the Wi3 CMS, but that the CMS cannot be used for commercial purposes.
+Energia is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License. Most importantly, this implies that anyone is free to share and remix Energia, but that Energia cannot be used for commercial purposes.
