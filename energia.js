@@ -5,22 +5,26 @@ var Energia = Class.$extend({
 	entities : [],
 	selectedEntities : [],
 	turnCount : 0,
-	timerID : null,
+	previousTurnTime : null, // Timestamp. Used to calculate the expired time since previous iteration so that the amount of pulsable resources, moving-distance etc can be calculated
+	currentTurnTime : null, // Time at start of the current turn. This ensures an identical timeDelta between current and previous turn throughout the turn.
+	timerID : null, // Global timer that pulses resources, moves entities etc
 
 	// Constructor
 	__init__ : function() {
 	
 		// Configuration
-		this.pulseDelay = 1000; // in MilliSeconds
+		this.timerDelay = 1000/60;  // in MilliSeconds. Resources and position will be calculated every [timerDelay] milliseconds.
+							   // The timerDelay does *not* influence speed of movement etc, because position is based per second, not per iteration.
+							   // The timerDelay thus only influences choppiness (and game-performance), not movement speed or pulse speed.
 	
 		// Classes
 		var Entity = Class.$extend({
-		
-			testProperty : 10,
 
 			__init__ : function() {
-				// Better assign with 'var obj = new Entity.$withData({value: 42});'
+				// For custom properties use 'var obj = new Entity.fillData({value: 42});'
 				this.position = { x : 0, y : 0 }; // in-game meters
+				this.wayPoints = [];
+				this.maxSpeed = 10; // in-game meters per second
 				this.resources = { energy: 0, yellow: 0 };
 				this.pulseRadius = 15; // in-game meters
 				this.resourceStorageCapacity = { energy: 1000 };
@@ -202,15 +206,26 @@ var Energia = Class.$extend({
 		// Set timer for the next pulse
 		// Note: this points to global scope when executed from within window.setTimeout and thus .timer() cannot be found
 		// Consequently, we need to bind our 'this' as the execution environment
-		this.timerID = setTimeout(this.timer.bind(this), this.pulseDelay);
+		this.timerID = setTimeout(this.timer.bind(this), this.timerDelay);
 		// Increase turn number
 		this.turnCount++;
-		// Loop over every entity, and perform their actions
+		// Calculate timeDelta since previous turn, and store the current time
+		this.storeTimeForCurrentTurn();
+		var timeDelta = this.getTimeDelta(); // in milliseconds
+		var secondsThatHavePassed = (timeDelta / 1000);
+		// Start the new turn of every entity
 		for (entityid in this.entities) {
 			var entity = this.entities[entityid];
 			entity.onStartOfTurn();
-			entity.resources.energy += entity.getProduction("energy");
-			entity.resources.energy -= entity.getConsumption("energy");
+		}
+		// Loop over every entity, and perform their actions
+		for (entityid in this.entities) {
+			var entity = this.entities[entityid];
+			// Do consumption and production
+			entity.resources.energy += entity.getProduction("energy") * secondsThatHavePassed;
+			entity.resources.energy -= entity.getConsumption("energy") * secondsThatHavePassed;
+			// Move the entity to the correct space
+			this.moveEntities([entityid]);
 			// Determine which elements fall within the pulse radius, and pulse energy to them if they want that
 			// First, determine how many entities want resources, and how much resources they want in total
 			var wantedResources = {};
@@ -264,6 +279,8 @@ var Energia = Class.$extend({
 						if (amount > 0) {
 							// Entity2 wants to have 'amount', but do we want to give it?
 							var amountToGive = entity.getPreferableAmountOfResourcesToPulse(resourcename, amount, entity2, wantedResources);
+							// Adjust amount for the time that has passed since previous turn
+							amountToGive = amountToGive * secondsThatHavePassed;
 							// Pulse resources over
 							entity.resources[resourcename] -= amountToGive;
 							entity.resourcesPulsedDuringTurn[resourcename] += amountToGive;
@@ -273,7 +290,6 @@ var Energia = Class.$extend({
 					}
 				}
 			}
-			entity.onEndOfTurn();
 		}
 		// Check which entities will cease to exist
 		for(entityid in this.entities) {
@@ -281,12 +297,18 @@ var Energia = Class.$extend({
 				var toBeRemoved = {};
 				toBeRemoved[entityid] = this.entities[entityid];
 				delete this.entities[entityid];
+			} else {
+				// Formally end its turn
+				entity.onEndOfTurn();
 			}
 		}
 	},
 	
 	// Start the simulation
 	start : function() {
+		// Set current time as start-time
+		this.storeTimeForCurrentTurn(); // move current turn's time (==null) to prev turn and set current turn's time
+		this.storeTimeForCurrentTurn(); // move current turn's time (==now) to prev turn and set current turn's time
 		// Start the timer
 		this.timer();
 	},
@@ -327,6 +349,52 @@ var Energia = Class.$extend({
 			this.renderer.onEntitiesRemoved([entities[entityID]]);
 			delete this.entities[entities[entityID]];
 		}
+	},
+	
+	getEntity : function(entityID) {
+		// Get entity from array, based in its index
+		return this.entities[entityID];
+	},
+	
+	setWayPointForEntities : function(entities, x, y) {
+		// Add waypoints to the entities
+		for(i in entities) {
+			var entityID = entities[i];
+			var entity = this.getEntity(entityID);
+			entity.waypoints = [{x:x,y:y}];
+		}
+	},
+	
+	moveEntities : function(entities) {
+		// Get timedelta and calculate entity-speed and move entity accordingly
+		var timeDelta = this.getTimeDelta();
+		var secondsThatHavePassed = timeDelta / 1000;
+		// Move entities towareds their waypoints
+		for(i in entities) {
+			var entityID = entities[i];
+			var entity = this.getEntity(entityID);
+			if (entity.waypoints != undefined && entity.waypoints.length > 0) {
+				// Calculate max distance that entities can move this turn
+				var maxDistance = entity.maxSpeed * secondsThatHavePassed;
+				// Calculate direction in which entity should go
+				var dx = entity.waypoints[0].x - entity.position.x;
+				var dy = entity.waypoints[0].y - entity.position.y;
+				// Move entity
+				entity.position.x += (dx < 0 ? maxDistance * -1 : maxDistance);
+				entity.position.y += (dy < 0 ? maxDistance * -1 : maxDistance);
+			}
+		}
+	},
+	
+	// Time functions
+	getTimeDelta : function() {
+		// Calculate  difference between current time and the stored time
+		return (this.currentTurnTime - this.previousTurnTime); // in milliseconds
+	},
+	
+	storeTimeForCurrentTurn : function() {
+		this.previousTurnTime = this.currentTurnTime;
+		this.currentTurnTime = new Date().getTime();
 	},
 	
 	// Handy functions
@@ -372,10 +440,14 @@ Energia.renderer = Class.$extend({
 		this.doRender = true;
 		// Initiate the render-cyclus
 		// Request requestAnimationFrame on the DOM canvas element, to make the browser call this.render when this.canvas will be redrawn
-		requestAnimFrame(this.render.bind(this), this.canvas);
+		requestAnimFrame(this.loopRender.bind(this), this.canvas);
 	},
 	stopRender : function() {
 		this.doRender = false;
+	},
+	loopRender : function() {
+		this.render.bind(this)();
+		requestAnimFrame(this.loopRender.bind(this), this.canvas);
 	},
 	render : function() {
 		// Clear the canvas
@@ -409,6 +481,16 @@ Energia.renderer = Class.$extend({
 			this.canvas.fillStyle = "rgba(0,0,0,0.1)";  
 			this.canvas.fill();
 		}
+		// Render the selection Bounding Box
+		if (this.energia.input.mouseDownPosition.x != -1) {
+			this.canvas.fillStyle = "#000000";
+			this.canvas.strokeRect(
+				this.energia.input.mouseDownPosition.x, 
+				this.energia.input.mouseDownPosition.y,
+				(this.energia.input.mouseCurrentPosition.x - this.energia.input.mouseDownPosition.x), 
+				(this.energia.input.mouseCurrentPosition.y - this.energia.input.mouseDownPosition.y)
+			);
+		}
 		// Render context menu, if useful
 		var contextMenu = $("#energia_renderer_contextmenu");
 		if (!contextMenu.length) {
@@ -424,10 +506,6 @@ Energia.renderer = Class.$extend({
 		} else {
 			contextMenu.fadeOut();
 		}
-		// Request requestAnimationFrame on the DOM canvas element, to make the browser call this.render when this.canvas will be redrawn
-		if (this.doRender == true) {
-			requestAnimFrame(this.render.bind(this), this.canvas);
-		}
 	},
 	onEntitiesRemoved : function(entities) {
 		for(entityNo in entities) {
@@ -442,14 +520,39 @@ Energia.input = Class.$extend({
 		this.canvasContainer = $(canvasContainer);
 		// Set listener on document
 		$(this.canvasContainer).on("click", this.processInput.bind(this));
+		$(this.canvasContainer).on("mousedown", this.setMouseDownPosition.bind(this));
+		$(this.canvasContainer).on("mousemove", this.setMouseCurrentPosition.bind(this));
+		$(this.canvasContainer).on("contextmenu", this.onContextMenu.bind(this));
 	},
 	info : "Default input",
 	canvasContainer : null,
 	energia : null,
 	mouseDownPosition : {x:-1,y:-1},
 	setMouseDownPosition : function(event) {
-		this.mouseDownPosition.x = event.offsetX;
-		this.mouseDownPosition.y = event.offsetY;
+		// If left click, then remember the mouseDown
+		// left button == 1
+		// center button = 2
+		// right button == 3
+		if (event.which == 1) {
+			this.mouseDownPosition.x = event.offsetX;
+			this.mouseDownPosition.y = event.offsetY;
+		}
+	},
+	mouseCurrentPosition : {x:-1,y:-1},
+	setMouseCurrentPosition : function(event) {
+		// Set the current mouse position
+		this.mouseCurrentPosition.x = event.offsetX;
+		this.mouseCurrentPosition.y = event.offsetY;
+		// If we need to draw a bounding box, do it right now. Somehow, this is faster than waiting for the requestAnimFrame()
+		if (this.mouseDownPosition.x != -1) {
+			this.energia.renderer.render.bind(this.energia.renderer)();
+		}
+	},
+	onContextMenu : function(event) {
+		// Pass right-click event to processInput function
+		this.processInput(event);
+		// Do not show any browser-contextmenu
+		return false;
 	},
 	processInput : function(event) {
 		// If left click, then select or deslect
@@ -457,31 +560,64 @@ Energia.input = Class.$extend({
 		// center button = 2
 		// right button == 3
 		if (event.which == 1) {
-			// Find the element at this position
-			var x = event.offsetX;
-			var y = event.offsetY;
-			var closestDistance, closestEntityID = null;
-			for (entityID in this.energia.entities) {
-				var entity = energia.entities[entityID];
-				var x2 = entity.position.x * 15; // 15px per in-game meter
-				var y2 = entity.position.y * 15; // 15px per in-game meter
-				var distanceToEvent = energia.distance({x:x2,y:y2}, {x:x,y:y});
-				if (closestDistance == null || distanceToEvent < closestDistance) {
-					closestDistance = distanceToEvent;
-					closestEntityID = entityID;
+			// If the user did not draw a 'substantial' bounding box, just select one entity
+			if (energia.distance(this.mouseDownPosition, this.mouseCurrentPosition) < 5) {
+				// Find the element at this position
+				var x = event.offsetX;
+				var y = event.offsetY;
+				var closestDistance, closestEntityID = null;
+				for (entityID in this.energia.entities) {
+					var entity = energia.entities[entityID];
+					var x2 = entity.position.x * 15; // 15px per in-game meter
+					var y2 = entity.position.y * 15; // 15px per in-game meter
+					var distanceToEvent = energia.distance({x:x2,y:y2}, {x:x,y:y});
+					if (closestDistance == null || distanceToEvent < closestDistance) {
+						closestDistance = distanceToEvent;
+						closestEntityID = entityID;
+					}
+				}
+				if (closestDistance > 30) {
+					// Deselect any selected entities
+					this.energia.setSelectedEntities([]);
+				} else {
+					// Select the closest entity
+					this.energia.setSelectedEntities([closestEntityID]);
+				}
+			} else {
+				// User did draw a bounding box, so select all entities within the box
+				var x1 = this.mouseDownPosition.x;
+				var x2 = event.offsetX;
+				var y1 = this.mouseDownPosition.y;
+				var y2 = event.offsetY;
+				selectedEntities = [];
+				for (entityID in this.energia.entities) {
+					var entity = energia.entities[entityID];
+					var ex = entity.position.x * 15; // 15px per in-game meter
+					var ey = entity.position.y * 15; // 15px per in-game meter
+					if ( ((ex > x1 && ex < x2) || (ex < x1 && ex > x2)) &&
+					((ey > y1 && ey < y2) || (ey < y1 && ey > y2)) ){
+						selectedEntities.push(entityID);
+					}					
+				}
+				if (selectedEntities.size == 0) {
+					// Deselect any selected entities
+					this.energia.setSelectedEntities([]);
+				} else {
+					// Select the closest entity
+					this.energia.setSelectedEntities(selectedEntities);
 				}
 			}
-			if (closestDistance > 30) {
-				// Deselect any selected entities
-				this.energia.setSelectedEntities([]);
-			} else {
-				// Select the closest entity
-				this.energia.setSelectedEntities([closestEntityID]);
+		} else if (event.which == 3) {
+			// Make the selected entities move to the specified event.position
+			if (this.energia.getSelectedEntities() != null) {
+				this.energia.setWayPointForEntities(this.energia.getSelectedEntities(), event.offsetX / 15, event.offsetY / 15);
 			}
 		}
 		// Prevent default action
 		event.preventDefault();
 		event.stopPropagation();
+		// Reset the mouseDownPosition
+		this.mouseDownPosition = { x:-1, y:-1 };
 		return false;
 	}
 });
