@@ -24,7 +24,7 @@ Energia.renderer3D = Class.$extend({
                 
                 // Shadow light
                 var spotLight = new THREE.SpotLight( 0xffffcc );
-                spotLight.position.set( 0, 100, 100 );
+                spotLight.position.set( -100, 100, 100 );
                 spotLight.target.position.set( 0, 0, 0 );
                 spotLight.castShadow = true;
                 spotLight.shadowMapHeight = 2048;
@@ -61,8 +61,8 @@ Energia.renderer3D = Class.$extend({
                 document.body.appendChild( this.stats.domElement )
             
                 // Add ground plane
-                var geometry = new THREE.PlaneGeometry( 100, 100, 10, 10 );
-                var material = new THREE.MeshLambertMaterial( { color: 0xaaaaaa } );
+                var geometry = new THREE.PlaneGeometry( 1000, 1000 );
+                var material = new THREE.MeshBasicMaterial( { color: 0xeeeeee } );
                 var ground = new THREE.Mesh( geometry, material );
                 ground.receiveShadow = true;
                 this.scene.add( ground );
@@ -128,26 +128,27 @@ Energia.renderer3D = Class.$extend({
                     cube.position.x = entity.position.x;
                     cube.position.y = entity.position.y;
                     cube.position.z = 1;
+                    cube.hovered = false;
                     // Events on the mesh
                     cube.on('mouseover', function(event){
-                        event.target.material = event.target.selectedMaterial;
+                        event.target.hovered = true;
                     });
                     cube.on('mouseout', function(event){
-                        event.target.material = event.target.normalMaterial;
+                        event.target.hovered = false;
                     });
-                    entity.renderer3Dmesh = true;
+                    entity.renderer3Dmesh = cube;
                     this.scene.add( cube );
                 }
                 // Select color for entity
                 if (entity instanceof this.energia.Producer) {
-                        var color = "#ff0000";
+                        entity.renderer3Dmesh.material.color.setHex( 0xff0000 );
                 } else {
-                        var color = "#000";
+                        entity.renderer3Dmesh.material.color.setHex( 0x000000 );
                 }
                 // Make selected entities white
-                if (this.energia.selectedEntities.indexOf(entityID) != -1)
+                if (entity.renderer3Dmesh.hovered == true || this.energia.selectedEntities.indexOf(entityID) != -1)
                 {
-                        color = "#00ff00";
+                        entity.renderer3Dmesh.material.color.setHex( 0xffffff );
                 }
                 
             }
