@@ -23,13 +23,13 @@ Energia.renderer3D = Class.$extend({
                 this.scene.add ( ambientLight );
                 
                 // Shadow light
-                var spotLight = new THREE.SpotLight( 0xffffcc );
-                spotLight.position.set( -100, 100, 100 );
-                spotLight.target.position.set( 0, 0, 0 );
-                spotLight.castShadow = true;
-                spotLight.shadowMapHeight = 2048;
-                spotLight.shadowMapWidth = 1024;
-                this.scene.add( spotLight );
+                var directionalLight = new THREE.DirectionalLight( 0xffffcc );
+                directionalLight.position.set( -100, 100, 100 );
+                //directionalLight.target.position.set( 0, 0, 0 );
+                directionalLight.castShadow = true;
+                directionalLight.shadowMapHeight = 2048;
+                directionalLight.shadowMapWidth = 2048;
+                this.scene.add( directionalLight );
 
                 // put a camera in the scene
                 this.camera = new THREE.PerspectiveCamera(50, this.canvasContainer.width() / this.canvasContainer.height(), 1, 1000000 );
@@ -118,7 +118,7 @@ Energia.renderer3D = Class.$extend({
                 // Add cube to entity if it was not already there
                 if (entity.renderer3Dmesh == undefined) {
                     var cube = new THREE.Mesh( 
-                        new THREE.CubeGeometry( 2, 2, 2 ),
+                        new THREE.CubeGeometry( 1, 1, 1 ),
                         new THREE.MeshLambertMaterial({color:0xffffff})
                     );
                     cube.castShadow = true;
